@@ -30,3 +30,45 @@ jobs:
         with:
           category: guarddog-builtin
           sarif_file: guarddog.sarif
+      - name: Fail Job on Typosquatting or SARIF Findings
+        run: |
+          uv run --python 3.12 python - << 'EOF'
+          import json, difflib, re, sys
+          # 1. Prüfe, ob GuardDog im SARIF-Bericht Risiken gefunden hat
+          with open("guarddog.sarif") as f:
+              sarif = json.load(f)
+          results = sarif.get("runs", [{}])[0].get("results", [])
+          if results:
+              print(f"[SECURITY ALERT] GuardDog found {len(results)} issue(s):")
+              for r in results:
+                  print(" -", r.get("message", {}).get("text"))
+              sys.exit(1)
+          # 2. Prüfe zusätzlich auf Typosquatting (auch falls das Tippfehler-Paket nicht auf PyPI existiert)
+          POPULAR = ["requests", "urllib3", "numpy", "pandas", "flask", "django", "cryptography", "boto3"]
+          with open("requirements.txt") as f:
+              pkgs = [re.split(r"[=<>!~]", l.strip())[0].strip().lower() for l in f if l.strip() and not l.startswith(("#", "-"))]
+          for pkg in pkgs:
+              if pkg not in POPULAR:
+                  close = difflib.get_close_matches(pkg, POPULAR, n=1, cutoff=0.75)
+                  if close:
+                      print(f"[SECURITY ALERT] Typosquatting detected: '{pkg}' is a look-alike of '{close[0]}'!")
+                      sys.exit(1)
+          print("Security check passed: 0 risks detected.")
+          EOF
+  audit:
+    name: Scan audit
+    runs-on: ubuntu-latest
+    steps:      
+      - name: Checkout Code
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install Security Scanners (GuardDog & pip-audit)
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+      - name: Run Vulnerability Audit (pip-audit)
+        run: |
+          pip-audit -r requirements.txt --require-hashes
