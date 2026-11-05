@@ -1,0 +1,33 @@
+name: CI & Supply Chain Security
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install GuardDog (Typosquatting Scanner)
+        run: |
+          python -m pip install --upgrade pip
+          pip install guarddog
+
+      - name: Scan requirements.txt for Typosquatting
+        run: |
+          guarddog pypi verify requirements.txt --exit-non-zero-on-finding
+
+      - name: Install Dependencies & Run App
+        run: |
+          pip install -r requirements.txt
+          python app.py
