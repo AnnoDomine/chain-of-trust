@@ -1,5 +1,4 @@
 name: GuardDog
-
 on:
   push:
     branches:
@@ -7,20 +6,27 @@ on:
   pull_request:
     branches:
       - main
-
 permissions:
   contents: read
-
 jobs:
   security-and-build:
     permissions:
-      contents: read # for actions/checkout to fetch code
+      contents: read
+      security-events: write
     name: Scan dependencies
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
-
-      - run: uvx guarddog pypi verify requirements.txt --exclude-rules repository_integrity_mismatch
+        with:
+          python-version: "3.12"
+      - name: Run GuardDog & Generate SARIF
+        run: |
+          uvx --python 3.12 guarddog pypi verify requirements.txt \
+            --output-format sarif \
+            --exclude-rules repository_integrity_mismatch > guarddog.sarif
+      - name: Upload SARIF file to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          category: guarddog-builtin
+          sarif_file: guarddog.sarif
